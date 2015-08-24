@@ -28,9 +28,9 @@ class FSEconomy(object):
         aircrafts = pd.DataFrame.from_csv(StringIO(data))
         try:
             aircrafts.RentalDry = aircrafts.RentalDry.astype(float)
-            aircrafts.RentalWet = aircrafts.RentalWet.astype(float)
-        except Exception as err:
+        except:
             import pdb; pdb.set_trace()
+        aircrafts.RentalWet = aircrafts.RentalWet.astype(float)
         return aircrafts
 
     def get_assignments(self):
@@ -63,23 +63,16 @@ class FSEconomy(object):
         return filtered_airports[distance_vector < nm]
 
     def get_distance(self, from_icao, to_icao):
-        lat1 = radians(self.airports[self.airports.icao == from_icao]['lat'].iloc[0])
-        lon1 = radians(self.airports[self.airports.icao == from_icao]['lon'].iloc[0])
-        lat2 = radians(self.airports[self.airports.icao == to_icao]['lat'].iloc[0])
-        lon2 = radians(self.airports[self.airports.icao == to_icao]['lon'].iloc[0])
-        R = 6371000
-        dlon = lon2 - lon1
-        dlat = lat2 - lat1
-        a = pow(sin(dlat/2), 2) + cos(lat1) * cos(lat2) * pow(sin(dlon/2), 2)
-        c = 2 * atan2(sqrt(a), sqrt(1-a))
-        return round((R * c) / 1850, 1)
+        lat1, lon1 = [radians(x) for x in self.airports[self.airports.icao == from_icao][['lat', 'lon']].iloc[0]]
+        lat2, lon2 = [radians(x) for x in self.airports[self.airports.icao == to_icao][['lat', 'lon']].iloc[0]]
+        return common.get_distance(lat1, lon1, lat2, lon2)
 
     def get_query(self, query_link):
         if self.user_key:
             query_link += '&userkey={}'.format(self.user_key)
         elif self.service_key:
             query_link += '&servicekey={}'.format(self.service_key)
-        while time.time() - self.last_request_time < 2:
+        while time.time() - self.last_request_time < 2.5:
             time.sleep(0.1)
         result = urllib2.urlopen(query_link).read()
         self.last_request_time = time.time()
@@ -97,24 +90,28 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--skey', help='Service key')
     parser.add_argument('--ukey', help='User key')
-    parser.add_argument('--local', help='Use local dump of assignments instead of update', type=bool, default=True)
+    parser.add_argument('--local', help='Use local dump of assignments instead of update', action='store_true')
+    parser.add_argument('--limit', help='Limit for search', type=int, default=10)
+    parser.add_argument('--radius', help='Radius for aircraft search (nm)', type=int, default=50)
     args = parser.parse_args()
     if not (args.skey or args.ukey):
         raise Exception('You have to provide userkey or service key')
-    fse = FSEconomy(False, args.ukey, args.skey)
+
+    fse = FSEconomy(args.local, args.ukey, args.skey)
 
     for col in fse.assignments.columns:
         if 'Unnamed' in col:
             del fse.assignments[col]
 
     # Searching best flight
-    aggregated = fse.get_aggregated_assignments()[:10]
+    aggregated = fse.get_aggregated_assignments()[:args.limit]
 
     def get_best_craft(icao):
-        print 'Searching for best aircraft from {}'.format(icao)
+        print 'Searching for the best aircraft from {}'.format(icao)
         max_seats = 0
         best_aircraft = None
-        for near_icao in fse.get_closest_airports(icao, 50).icao:
+        for near_icao in fse.get_closest_airports(icao, args.radius).icao:
+            print '--Searching for the best aircraft from {}'.format(near_icao)
             aircrafts = fse.get_aircrafts_by_icao(near_icao)
             if not len(aircrafts):
                 continue
@@ -143,23 +140,14 @@ def main():
 
     distance_func = lambda x, fse=fse: fse.get_distance(x['FromIcao'], x['ToIcao'])
     aggregated['Distance'] = aggregated.apply(distance_func, axis=1)
-
-    rent_func = lambda x: (x['Distance'] + x['CraftDistance']) * x['RentalDry'] / x['CraftCruise']
-    aggregated['Rent'] = aggregated.apply(rent_func, axis=1)
-
-    # TODO: do smth with dry
-    def get_earnings(x):
-        res = x['Pay'] / x['Amount'] * min(x['CraftSeats'], x['Amount']) # dirty earnings
-        if x['PtAssignment'] > 6:
-            res -= res * x['PtAssignment'] / 100                        # booking fee
-        t = (x['Distance'] + x['CraftDistance']) / x['CraftCruise']               # flight time
-        return round(res - t * x['RentalWet'], 2)
-    aggregated['Earnings'] = aggregated.apply(get_earnings, axis=1)
-
-
-    coef_func = lambda x: round(x['Earnings'] / ((x['Distance'] + x['CraftDistance']) / x['CraftCruise']), 2)
-    aggregated['Ratio'] = aggregated.apply(coef_func, axis=1)
+    aggregated['DryRent'] = aggregated.apply(common.get_rent, args=('RentalDry',), axis=1)
+    aggregated['WetRent'] = aggregated.apply(common.get_rent, args=('RentalWet',), axis=1)
+    aggregated['DryEarnings'] = aggregated.apply(common.get_earnings, args=('DryRent',), axis=1)
+    aggregated['WetEarnings'] = aggregated.apply(common.get_earnings, args=('WetRent',), axis=1)
+    aggregated['DryRatio'] = aggregated.apply(common.get_ratio, args=('DryEarnings',), axis=1)
+    aggregated['WetRatio'] = aggregated.apply(common.get_ratio, args=('WetEarnings',), axis=1)
     print aggregated
+    import pdb; pdb.set_trace()
 
 if __name__ == "__main__":
     main()
