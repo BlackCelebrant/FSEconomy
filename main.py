@@ -4,7 +4,7 @@ import pickle
 import time
 import urllib2
 import numpy as np
-from math import atan2, cos, pow, radians, sin, sqrt
+from math import radians
 from StringIO import StringIO
 
 import common
