@@ -26,10 +26,7 @@ class FSEconomy(object):
     def get_aircrafts_by_icao(self, icao):
         data = self.get_query(const.LINK + 'query=icao&search=aircraft&icao={}'.format(icao))
         aircrafts = pd.DataFrame.from_csv(StringIO(data))
-        try:
-            aircrafts.RentalDry = aircrafts.RentalDry.astype(float)
-        except:
-            import pdb; pdb.set_trace()
+        aircrafts.RentalDry = aircrafts.RentalDry.astype(float)
         aircrafts.RentalWet = aircrafts.RentalWet.astype(float)
         return aircrafts
 
@@ -73,9 +70,11 @@ class FSEconomy(object):
         elif self.service_key:
             query_link += '&servicekey={}'.format(self.service_key)
         while time.time() - self.last_request_time < 2.5:
-            time.sleep(0.1)
+            time.sleep(0.5)
         result = urllib2.urlopen(query_link).read()
         self.last_request_time = time.time()
+        if 'request was under the minimum delay' in result:
+            import pdb; pdb.set_trace()
         return result
 
     def get_aggregated_assignments(self):
@@ -133,7 +132,11 @@ def main():
     aggregated['CraftCruise'] = best_aircrafts.map(lambda x: x.Cruise)
     aggregated['RentalDry'] = best_aircrafts.map(lambda x: x.RentalDry)
     aggregated['RentalWet'] = best_aircrafts.map(lambda x: x.RentalWet)
+    # TODO: filter it when we searching for aircraft
     aggregated = aggregated[(aggregated.RentalDry > 0) | (aggregated.RentalWet > 0)]
+
+    aggregated['Assignments'] = aggregated.apply(common.get_best_assignments, args=(fse.assignments,), axis=1)
+    import pdb; pdb.set_trace()
 
     craft_distance_func = lambda x, fse=fse: fse.get_distance(x['FromIcao'], x['CraftLocation'])
     aggregated['CraftDistance'] = aggregated.apply(craft_distance_func, axis=1)
