@@ -1,6 +1,7 @@
 import pandas as pd
 import pickle
 from math import atan2, cos, pow, sin, sqrt
+from pulp import LpMaximize, LpProblem, LpVariable
 
 import const
 
@@ -10,35 +11,14 @@ get_ratio_func = lambda x: round(x['Earnings'] / ((x['Distance'] + x['CraftDista
 
 def get_best_assignments(x, df):
     df = df[(df.FromIcao == x['FromIcao']) & (df.ToIcao == x['ToIcao']) & (df.Amount <= x['CraftSeats'])]
+    prob = LpProblem("Knapsack problem", LpMaximize)
+    W = [8, 40, 30]
+    P = [5377, 17923, 13439]
+    X = [LpVariable('x{}'.format(i), 0, 1, 'Integer') for i in range(1, 4)]
+    prob += sum([x*p for x, p in zip(X, P)]), 'obj'
+    prob += sum([x*w for x, w in zip(X, W)]) <= 42, 'c1'
+    prob.solve()
     import pdb; pdb.set_trace()
-    df['PayPerUnit'] = df.apply(lambda y: round(y['Pay'] / y['Amount'], 2), axis=1)
-    df = df.sort('PayPerUnit')
-    indexes = []
-    current_amount = 0
-    for index, row in df.iterrows():
-        if current_amount + row['Amount'] > x['CraftSeats']:
-            break
-        current_amount += row['Amount']
-        indexes.append(index)
-    return indexes
-
-    t = {}                                     #
-    #for i in range(0, len(a)):
-    #    t[float(a[i]) / float(c[i])] = i
-    #k = t.keys()
-    #k.sort()
-    #c_greedy = 0
-    #w_greedy = 0
-    #for i in k:
-    #    if w_greedy + a[t[i]] <= b:
-    #        w_greedy = w_greedy + a[t[i]]
-    #        c_greedy = c_greedy + c[t[i]]
-
-    #c_max=max(c)
-
-    #c_result = max(c_greedy, c_max)
-    ## TODO: return vector with assignments ids
-    #return c_result
 
 
 def get_distance(lat1, lon1, lat2, lon2):
