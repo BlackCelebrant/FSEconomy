@@ -77,10 +77,11 @@ class FSEconomy(object):
             import pdb; pdb.set_trace()
         return result
 
-    def get_aggregated_assignments(self):
-        #filtered = self.assignments[self.assignments.Amount < 5]
-        #filtered = filtered[self.assignments.UnitType == 'passengers']
-        #grouped = filtered.groupby(['FromIcao', 'ToIcao'], as_index=False)
+    def get_aggregated_assignments(self, cargo=False):
+        if cargo:
+            self.assignments = self.assignments[self.assignments.UnitType == 'kg']
+        else:
+            self.assignments = self.assignments[self.assignments.UnitType == 'passengers']
         grouped = self.assignments.groupby(['FromIcao', 'ToIcao'], as_index=False)
         aggregated = grouped.aggregate(np.sum)
         return aggregated.sort('Pay', ascending=False)
@@ -89,9 +90,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--skey', help='Service key')
     parser.add_argument('--ukey', help='User key')
-    parser.add_argument('--local', help='Use local dump of assignments instead of update', action='store_true')
     parser.add_argument('--limit', help='Limit for search', type=int, default=10)
     parser.add_argument('--radius', help='Radius for aircraft search (nm)', type=int, default=50)
+    parser.add_argument('--cargo', help='Search cargo assignments (doesn\'t work correctly now)', action='store_true')
+    parser.add_argument('--local', help='Use local dump of assignments instead of update', action='store_true')
     parser.add_argument('--debug', help='Use this key to enable debug breakpoints', action='store_true')
     args = parser.parse_args()
     if not (args.skey or args.ukey):
@@ -106,7 +108,7 @@ def main():
 
     # Searching best flight
     # TODO: make while loop here, because some groups of assignments could be impossible to do
-    aggregated = fse.get_aggregated_assignments()[:args.limit]
+    aggregated = fse.get_aggregated_assignments(args.cargo)[:args.limit]
 
     def get_best_craft(icao):
         print 'Searching for the best aircraft from {}'.format(icao)
@@ -148,7 +150,7 @@ def main():
     aggregated['WetEarnings'] = aggregated.apply(common.get_earnings, args=('WetRent', fse.assignments), axis=1)
     aggregated['DryRatio'] = aggregated.apply(common.get_ratio, args=('DryEarnings',), axis=1)
     aggregated['WetRatio'] = aggregated.apply(common.get_ratio, args=('WetEarnings',), axis=1)
-    print aggregated.sort('Ratio', ascending=False)
+    print aggregated.sort('DryRatio', ascending=False)
     if args.debug:
         import pdb; pdb.set_trace()
 
