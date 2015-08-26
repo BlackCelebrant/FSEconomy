@@ -9,14 +9,14 @@ import const
 get_ratio_func = lambda x: round(x['Earnings'] / ((x['Distance'] + x['CraftDistance']) / x['CraftCruise']), 2)
 
 
-def get_best_assignments(x, df):
-    df = df[(df.FromIcao == x['FromIcao']) & (df.ToIcao == x['ToIcao']) & (df.Amount <= x['CraftSeats'])]
+def get_best_assignments(row, df):
+    df = df[(df.FromIcao == row['FromIcao']) & (df.ToIcao == row['ToIcao']) & (df.Amount <= row['CraftSeats'])]
     prob = LpProblem("Knapsack problem", LpMaximize)
-    W = [8, 40, 30]
-    P = [5377, 17923, 13439]
-    X = [LpVariable('x{}'.format(i), 0, 1, 'Integer') for i in range(1, 4)]
-    prob += sum([x*p for x, p in zip(X, P)]), 'obj'
-    prob += sum([x*w for x, w in zip(X, W)]) <= 42, 'c1'
+    w_list = df.Amount.tolist()
+    p_list = df.Pay.tolist()
+    x_list = [LpVariable('x{}'.format(i), 0, 1, 'Integer') for i in range(1, 1 + len(w_list))]
+    prob += sum([x*p for x, p in zip(x_list, p_list)]), 'obj'
+    prob += sum([x*w for x, w in zip(x_list, w_list)]) <= row['CraftSeats'], 'c1'
     prob.solve()
     import pdb; pdb.set_trace()
 
