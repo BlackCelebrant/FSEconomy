@@ -1,6 +1,7 @@
 import pandas as pd
 import pickle
 from math import atan2, cos, pow, sin, sqrt
+from pulp import LpMaximize, LpProblem, LpVariable, value
 
 import const
 
@@ -17,11 +18,21 @@ def get_distance(lat1, lon1, lat2, lon2):
     return round((r * c) / 1850, 1)
 
 
-def get_earnings(x, rent_column):
-    res = x['Pay'] / x['Amount'] * min(x['CraftSeats'], x['Amount'])  # dirty earnings
-    if x['PtAssignment'] > 6:
-        res -= res * x['PtAssignment'] / 100                          # booking fee
-    return round(res - x[rent_column], 2) if x[rent_column] else 0
+def get_earnings(row, rent_column, df):
+    df = df[(df.FromIcao == row['FromIcao']) & (df.ToIcao == row['ToIcao']) & (df.Amount <= row['CraftSeats'])]
+    if not len(df):
+        return 0
+    prob = LpProblem("Knapsack problem", LpMaximize)
+    w_list = df.Amount.tolist()
+    p_list = df.Pay.tolist()
+    x_list = [LpVariable('x{}'.format(i), 0, 1, 'Integer') for i in range(1, 1 + len(w_list))]
+    prob += sum([x*p for x, p in zip(x_list, p_list)]), 'obj'
+    prob += sum([x*w for x, w in zip(x_list, w_list)]) <= row['CraftSeats'], 'c1'
+    prob.solve()
+    res = value(prob.objective)                                           # dirty earnings
+    if row['PtAssignment'] > 6:
+        res -= res * row['PtAssignment'] / 100                            # booking fee
+    return round(res - row[rent_column], 2) if row[rent_column] else 0
 
 
 def get_ratio(x, earnings_column):

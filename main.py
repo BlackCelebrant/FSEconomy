@@ -26,10 +26,7 @@ class FSEconomy(object):
     def get_aircrafts_by_icao(self, icao):
         data = self.get_query(const.LINK + 'query=icao&search=aircraft&icao={}'.format(icao))
         aircrafts = pd.DataFrame.from_csv(StringIO(data))
-        try:
-            aircrafts.RentalDry = aircrafts.RentalDry.astype(float)
-        except:
-            import pdb; pdb.set_trace()
+        aircrafts.RentalDry = aircrafts.RentalDry.astype(float)
         aircrafts.RentalWet = aircrafts.RentalWet.astype(float)
         return aircrafts
 
@@ -73,9 +70,11 @@ class FSEconomy(object):
         elif self.service_key:
             query_link += '&servicekey={}'.format(self.service_key)
         while time.time() - self.last_request_time < 2.5:
-            time.sleep(0.1)
+            time.sleep(1)
         result = urllib2.urlopen(query_link).read()
         self.last_request_time = time.time()
+        if 'request was under the minimum delay' in result:
+            import pdb; pdb.set_trace()
         return result
 
     def get_aggregated_assignments(self):
@@ -99,11 +98,13 @@ def main():
 
     fse = FSEconomy(args.local, args.ukey, args.skey)
 
+    # TODO: we have unnamed columns after data fetching
     for col in fse.assignments.columns:
         if 'Unnamed' in col:
             del fse.assignments[col]
 
     # Searching best flight
+    # TODO: make while loop here, because some groups of assignments could be impossible to do
     aggregated = fse.get_aggregated_assignments()[:args.limit]
 
     def get_best_craft(icao):
@@ -117,7 +118,6 @@ def main():
                 continue
             merged = pd.DataFrame.merge(aircrafts, fse.aircrafts, left_on='MakeModel', right_on='Model', how='inner')
             aircraft = merged.ix[merged.Seats.idxmax()]
-            # TODO: filter ignored aircrafts
             if not aircraft.RentalWet + aircraft.RentalDry or aircraft.MakeModel in const.IGNORED_AIRCRAFTS:
                 continue
             if aircraft.Seats > max_seats:
@@ -133,6 +133,7 @@ def main():
     aggregated['CraftCruise'] = best_aircrafts.map(lambda x: x.Cruise)
     aggregated['RentalDry'] = best_aircrafts.map(lambda x: x.RentalDry)
     aggregated['RentalWet'] = best_aircrafts.map(lambda x: x.RentalWet)
+    # TODO: filter it when we searching for aircraft
     aggregated = aggregated[(aggregated.RentalDry > 0) | (aggregated.RentalWet > 0)]
 
     craft_distance_func = lambda x, fse=fse: fse.get_distance(x['FromIcao'], x['CraftLocation'])
@@ -142,8 +143,8 @@ def main():
     aggregated['Distance'] = aggregated.apply(distance_func, axis=1)
     aggregated['DryRent'] = aggregated.apply(common.get_rent, args=('RentalDry',), axis=1)
     aggregated['WetRent'] = aggregated.apply(common.get_rent, args=('RentalWet',), axis=1)
-    aggregated['DryEarnings'] = aggregated.apply(common.get_earnings, args=('DryRent',), axis=1)
-    aggregated['WetEarnings'] = aggregated.apply(common.get_earnings, args=('WetRent',), axis=1)
+    aggregated['DryEarnings'] = aggregated.apply(common.get_earnings, args=('DryRent', fse.assignments), axis=1)
+    aggregated['WetEarnings'] = aggregated.apply(common.get_earnings, args=('WetRent', fse.assignments), axis=1)
     aggregated['DryRatio'] = aggregated.apply(common.get_ratio, args=('DryEarnings',), axis=1)
     aggregated['WetRatio'] = aggregated.apply(common.get_ratio, args=('WetEarnings',), axis=1)
     print aggregated
