@@ -92,6 +92,7 @@ def main():
     parser.add_argument('--local', help='Use local dump of assignments instead of update', action='store_true')
     parser.add_argument('--limit', help='Limit for search', type=int, default=10)
     parser.add_argument('--radius', help='Radius for aircraft search (nm)', type=int, default=50)
+    parser.add_argument('--debug', help='Use this key to enable debug breakpoints', action='store_true')
     args = parser.parse_args()
     if not (args.skey or args.ukey):
         raise Exception('You have to provide userkey or service key')
@@ -147,8 +148,9 @@ def main():
     aggregated['WetEarnings'] = aggregated.apply(common.get_earnings, args=('WetRent', fse.assignments), axis=1)
     aggregated['DryRatio'] = aggregated.apply(common.get_ratio, args=('DryEarnings',), axis=1)
     aggregated['WetRatio'] = aggregated.apply(common.get_ratio, args=('WetEarnings',), axis=1)
-    print aggregated
-    import pdb; pdb.set_trace()
+    print aggregated.sort('Ratio', ascending=False)
+    if args.debug:
+        import pdb; pdb.set_trace()
 
 if __name__ == "__main__":
     main()
