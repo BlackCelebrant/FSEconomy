@@ -1,7 +1,7 @@
 import pandas as pd
 import pickle
+import time
 from math import atan2, cos, pow, sin, sqrt
-from pulp import LpMaximize, LpProblem, LpVariable, value
 
 import const
 
@@ -18,36 +18,23 @@ def get_distance(lat1, lon1, lat2, lon2):
     return round((r * c) / 1850, 1)
 
 
-def get_earnings(row, rent_column, df):
-    df = df[(df.FromIcao == row['FromIcao']) & (df.ToIcao == row['ToIcao']) & (df.Amount <= row['CraftSeats'])]
-    if not len(df):
-        return 0
-    prob = LpProblem("Knapsack problem", LpMaximize)
-    w_list = df.Amount.tolist()
-    p_list = df.Pay.tolist()
-    x_list = [LpVariable('x{}'.format(i), 0, 1, 'Integer') for i in range(1, 1 + len(w_list))]
-    prob += sum([x*p for x, p in zip(x_list, p_list)]), 'obj'
-    prob += sum([x*w for x, w in zip(x_list, w_list)]) <= row['CraftSeats'], 'c1'
-    prob.solve()
-    res = value(prob.objective)                                           # dirty earnings
-    if row['PtAssignment'] > 6:
-        res -= res * row['PtAssignment'] / 100                            # booking fee
-    return round(res - row[rent_column], 2) if row[rent_column] else 0
+def get_earnings(row, rent_type):
+    res = row['Pay']
+    pt_amount = row['PtAssignment']
+    if pt_amount > 6:
+        res -= res * pt_amount / 100
+    return round(res - row[rent_type], 2) if row[rent_type] else 0
 
 
 def get_ratio(x, earnings_column):
-    return round(x[earnings_column] / ((x['Distance'] + x['CraftDistance']) / x['CraftCruise']), 2)
-
-
-def get_rent(x, rental_column):
-    return round((x['Distance'] + x['CraftDistance']) * x[rental_column] / x['CraftCruise'], 2)
+    return round(x[earnings_column] / ((x['Distance'] + x['CraftDistance']) / x['Cruise']), 2)
 
 
 def load_pickled_assignments():
     with open('assignments', 'rb') as f:
         assignments = pickle.load(f)
-    assignments.Pay = assignments.Pay.astype(float)
-    assignments.Amount = assignments.Amount.astype(float)
+    assignments.Pay = assignments.Pay.astype(int)
+    assignments.Amount = assignments.Amount.astype(int)
     assignments['All-In'] = assignments['All-In'].map(lambda x: True if x == 'true' else False)
     assignments.PtAssignment = assignments.PtAssignment.map(lambda x: True if x == 'true' else False)
     return assignments
@@ -68,3 +55,19 @@ def load_aircrafts():
     aircrafts.Crew = aircrafts.Crew.astype(int)
     aircrafts.Cruise = aircrafts.Cruise.astype(float)
     return aircrafts
+
+
+def retry(func, *args, **kwargs):
+    c = 1
+    count = kwargs.pop("count", 10)
+    error_type = kwargs.pop("error_type", Exception)
+    interval = kwargs.pop("interval", 1)
+    while True:
+        try:
+            return func(*args, **kwargs)
+        except error_type:
+            print 'retry'
+            if c >= count:
+                raise
+            c += 1
+            time.sleep(interval)
