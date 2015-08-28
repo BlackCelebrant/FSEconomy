@@ -4,7 +4,7 @@ import time
 import urllib2
 import numpy as np
 from math import radians
-from pulp import LpMaximize, LpProblem, LpVariable, value
+from pulp import LpMaximize, LpProblem, LpVariable
 from StringIO import StringIO
 
 import common
@@ -108,6 +108,21 @@ class FSEconomy(object):
         lat1, lon1 = [radians(x) for x in self.airports[self.airports.icao == from_icao][['lat', 'lon']].iloc[0]]
         lat2, lon2 = [radians(x) for x in self.airports[self.airports.icao == to_icao][['lat', 'lon']].iloc[0]]
         return common.get_distance(lat1, lon1, lat2, lon2)
+
+    def get_logs(self, from_id):
+        key = self.user_key or self.service_key
+        data = common.retry(self.get_query, const.LINK +
+                            'query=flightlogs&search=id&readaccesskey={}&fromid={}'.format(key, from_id))
+        logs = pd.DataFrame.from_csv(StringIO(data))
+        logs = logs[(logs.MakeModel != 'Airbus A321') & (logs.MakeModel != 'Boeing 737-800') & (logs.Type == 'flight')]
+        logs['Distance'] = logs.apply(lambda x, self=self: self.get_distance(x['From'], x['To']), axis=1)
+        logs = pd.merge(logs, self.aircrafts, left_on='MakeModel', right_on='Model')
+        logs['FlightTimeH'] = logs.apply(lambda x: int(x['FlightTime'].split(':')[0]), axis=1)
+        logs['FlightTimeM'] = logs.apply(lambda x: int(x['FlightTime'].split(':')[1]), axis=1)
+        logs = logs[(logs.FlightTimeH > 0) | (logs.FlightTimeM > 0)]
+        logs = logs[logs.Distance > 0]
+        logs['AvSpeed'] = logs.apply(lambda x: 60 * x['Distance'] / (60 * x['FlightTimeH'] + x['FlightTimeM']), axis=1)
+        import pdb; pdb.set_trace()
 
     def get_query(self, query_link):
         if self.user_key:

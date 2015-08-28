@@ -7,6 +7,7 @@ from fseconomy import FSEconomy
 
 def do_work(args):
     fse = FSEconomy(args.local, args.ukey, args.skey)
+    #fse.get_logs(2178373)
 
     # TODO: we have unnamed columns after data fetching
     for col in fse.assignments.columns:
