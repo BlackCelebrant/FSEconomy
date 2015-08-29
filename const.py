@@ -5,6 +5,7 @@ LINK = 'http://server.fseconomy.net/data?format=csv&'
 # i don't have or don't like some models
 IGNORED_AIRCRAFTS = [
     'ATR 72-500',
+    'Bristol Britannia 300',
     'Convair 580',
     'Fokker F27-500 Friendship',
     'Let L 410 UVP-E',
