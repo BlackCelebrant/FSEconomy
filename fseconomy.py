@@ -82,9 +82,10 @@ class FSEconomy(object):
             if not len(aircrafts):
                 continue
             merged = pd.DataFrame.merge(aircrafts, self.aircrafts, left_on='MakeModel', right_on='Model', how='inner')
-            aircraft = merged.ix[merged.Seats.idxmax()]
-            if not aircraft.RentalWet + aircraft.RentalDry or aircraft.MakeModel in const.IGNORED_AIRCRAFTS:
+            merged = merged[(~merged.MakeModel.isin(const.IGNORED_AIRCRAFTS)) & (merged.RentalWet + merged.RentalDry > 0)]
+            if not len(merged):
                 continue
+            aircraft = merged.ix[merged.Seats.idxmax()]
             if aircraft.Seats > max_seats:
                 best_aircraft = aircraft
                 max_seats = aircraft.Seats

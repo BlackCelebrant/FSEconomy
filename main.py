@@ -22,7 +22,7 @@ def do_work(args):
                                    'DryRatio', 'WetRatio'])
     index = 0
     for _, row in aggregated.iterrows():
-        if index >= args.limit:
+        if not args.min and index >= args.limit:
             break
         best_aircraft = fse.get_best_craft(row['FromIcao'], args.radius)
         if best_aircraft is None:
@@ -47,6 +47,10 @@ def do_work(args):
         row['WetRatio'] = common.get_ratio(row, 'WetEarnings')
         result.loc[index] = row
         index += 1
+        if not args.min:
+            continue
+        if row['DryEarnings'] > args.min or row['WetEarnings'] > args.min:
+            break
 
     #aggregated = aggregated.dropna()
 
@@ -63,6 +67,7 @@ def main():
     parser.add_argument('--cargo', help='Search cargo assignments (doesn\'t work correctly now)', action='store_true')
     parser.add_argument('--local', help='Use local dump of assignments instead of update', action='store_true')
     parser.add_argument('--debug', help='Use this key to enable debug breakpoints', action='store_true')
+    parser.add_argument('--min', help='Minimum earnings (time consuming)', type=int)
     args = parser.parse_args()
     if not (args.skey or args.ukey):
         raise Exception('You have to provide userkey or service key')

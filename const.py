@@ -8,6 +8,7 @@ IGNORED_AIRCRAFTS = [
     'Bristol Britannia 300',
     'Convair 580',
     'Fokker F27-500 Friendship',
+    'Ilyushin Il-18D',
     'Let L 410 UVP-E',
     'Let L 410 UVP-T',
     'Saab 340B',
