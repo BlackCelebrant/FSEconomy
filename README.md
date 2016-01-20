@@ -7,6 +7,8 @@ List of required modules:
  - pandas
  - numpy
  - pulp
+
+Numpy on Windows requires: [Microsoft Visual C++ Compiler for Python 2.7](https://www.microsoft.com/en-us/download/details.aspx?id=44266)
  
 ### Usage
 Simple search:
