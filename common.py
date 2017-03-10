@@ -61,12 +61,11 @@ def retry(func, *args, **kwargs):
     c = 1
     count = kwargs.pop("count", 10)
     error_type = kwargs.pop("error_type", Exception)
-    interval = kwargs.pop("interval", 1)
+    interval = kwargs.pop("interval", 60)
     while True:
         try:
             return func(*args, **kwargs)
         except error_type:
-            print 'retry'
             if c >= count:
                 raise
             c += 1

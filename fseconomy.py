@@ -15,6 +15,10 @@ class TooManyConnectionsException(Exception):
     pass
 
 
+class ServerUnreachableException(Exception):
+    pass
+
+
 class FSEconomy(object):
     def __init__(self, local, user_key=None, service_key=None):
         self.airports = common.load_airports()
@@ -37,7 +41,8 @@ class FSEconomy(object):
         return aggregated.sort('Pay', ascending=False)
 
     def get_aircrafts_by_icao(self, icao):
-        data = common.retry(self.get_query, const.LINK + 'query=icao&search=aircraft&icao={}'.format(icao))
+        data = common.retry(self.get_query, const.LINK + 'query=icao&search=aircraft&icao={}'.format(icao),
+                            error_type=TooManyConnectionsException)
         aircrafts = pd.DataFrame.from_csv(StringIO(data))
         aircrafts.RentalDry = aircrafts.RentalDry.astype(float)
         aircrafts.RentalWet = aircrafts.RentalWet.astype(float)
@@ -47,12 +52,13 @@ class FSEconomy(object):
         assignments = pd.DataFrame()
 
         i = 0
-        while i+1500 < len(self.airports):
+        lim = len(self.airports)
+        while i+1500 < lim:
             data = StringIO(self.get_jobs_from(self.airports.icao[i:i+1500]))
             assignments = pd.concat([assignments, pd.DataFrame.from_csv(data)])
             i += 1500
             print i
-        data = StringIO(self.get_jobs_from(self.airports.icao[i:len(self.airports)-1]))
+        data = StringIO(self.get_jobs_from(self.airports.icao[i:lim-1]))
         assignments = pd.concat([assignments, pd.DataFrame.from_csv(data)])
         with open('assignments', 'wb') as f:
             pickle.dump(assignments, f)
@@ -103,7 +109,8 @@ class FSEconomy(object):
         return filtered_airports[distance_vector < nm]
 
     def get_jobs_from(self, icaos):
-        return common.retry(self.get_query, const.LINK + 'query=icao&search=jobsfrom&icaos={}'.format('-'.join(icaos)))
+        return common.retry(self.get_query, const.LINK + 'query=icao&search=jobsfrom&icaos={}'.format('-'.join(icaos)),
+                            error_type=TooManyConnectionsException)
 
     def get_distance(self, from_icao, to_icao):
         lat1, lon1 = [radians(x) for x in self.airports[self.airports.icao == from_icao][['lat', 'lon']].iloc[0]]
@@ -113,7 +120,8 @@ class FSEconomy(object):
     def get_logs(self, from_id):
         key = self.user_key or self.service_key
         data = common.retry(self.get_query, const.LINK +
-                            'query=flightlogs&search=id&readaccesskey={}&fromid={}'.format(key, from_id))
+                            'query=flightlogs&search=id&readaccesskey={}&fromid={}'.format(key, from_id),
+                            error_type=TooManyConnectionsException)
         logs = pd.DataFrame.from_csv(StringIO(data))
         logs = logs[(logs.MakeModel != 'Airbus A321') & (logs.MakeModel != 'Boeing 737-800') & (logs.Type == 'flight')]
         logs['Distance'] = logs.apply(lambda x, self=self: self.get_distance(x['From'], x['To']), axis=1)
@@ -123,7 +131,6 @@ class FSEconomy(object):
         logs = logs[(logs.FlightTimeH > 0) | (logs.FlightTimeM > 0)]
         logs = logs[logs.Distance > 0]
         logs['AvSpeed'] = logs.apply(lambda x: 60 * x['Distance'] / (60 * x['FlightTimeH'] + x['FlightTimeM']), axis=1)
-        import pdb; pdb.set_trace()
 
     def get_query(self, query_link):
         if self.user_key:
@@ -134,7 +141,12 @@ class FSEconomy(object):
             time.sleep(1)
         result = urllib2.urlopen(query_link).read()
         self.last_request_time = time.time()
+        if 'many requests in 60 second period' in result:
+            print('Too many requests error. Use sevice key to avoid this error.')
+            raise TooManyConnectionsException(result)
         if 'request was under the minimum delay' in result:
             raise TooManyConnectionsException(result)
+        if 'Currently Closed for Maintenance' in result:
+            raise ServerUnreachableException(result)
         return result
 

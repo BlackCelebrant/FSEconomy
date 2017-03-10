@@ -58,6 +58,7 @@ def do_work(args):
     if args.debug:
         import pdb; pdb.set_trace()
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--skey', help='Service key')
